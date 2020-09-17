@@ -1,0 +1,1606 @@
+---
+title: "SEM"
+author: "Robin Gerl"
+date: "22 7 2020"
+output: html_document
+---
+
+#Packages
+```{r}
+pacman::p_load(tidyverse, haven, sjPlot, sjmisc, texreg, margins, knitr, labelled, broom, psych, lmtest,  magrittr,neuralnet,semPlot, corrr, lavaan, semTools, FactoMineR, GPArotation, factoextra,nFactors,see, corpcor, VIM,BaylorEdPsych, mvnmle,MVN, stargazer, descr,StatMatch,corrplot,xtable)
+
+```
+
+##Datenaufbereitung
+```{r}
+psychology_2017<-read_spss("psychology_2017.sav")
+
+psychology_2017 <- psychology_2017 %>% 
+  mutate(Duration = (cp17i193/60),
+         Duration = ifelse(Duration > 120,NA,Duration))
+
+liss_2017 <- psychology_2017 %>% 
+  select(cp17i001:cp17i009,
+    cp17i020:cp17i069, 
+    cp17i184:cp17i188,
+    cp17i193) %>% 
+  mutate(Duration = (cp17i193/60),
+         Duration = ifelse(Duration > 120,NA,Duration))
+
+liss_descr <- liss_2017 %>% 
+  select(cp17i001,cp17i003,cp17i004,cp17i005,cp17i187,cp17i188, cp17i026,cp17i036,cp17i041,cp17i051,cp17i027,cp17i047,cp17i052,cp17i035,cp17i040,cp17i050,cp17i065, cp17i044,cp17i054,cp17i069,cp17i023,cp17i043,cp17i048,cp17i053,cp17i058,cp17i068,Duration)
+
+
+```
+
+#Missing Values 
+```{r}
+table(is.na(liss_2017))
+
+table1<-colSums(is.na(liss_2017))
+
+table1 <- as.data.frame(table1)
+
+sink("missing.csv")
+
+print(table1)
+
+sink()
+
+missing <- liss_2017 %>% 
+  select(cp17i001, cp17i003:cp17i005,cp17i187,cp17i188,cp17i026,cp17i036,cp17i041,cp17i051,cp17i027,cp17i047, cp17i052,cp17i035,cp17i040,cp17i050,cp17i065,cp17i044,cp17i054,cp17i069,cp17i023,cp17i043,cp17i048,cp17i053,cp17i058,cp17i068, cp17i193)
+
+missing2 <- liss_2017 %>% 
+  select(cp17i001, cp17i003:cp17i005,cp17i187,cp17i188,cp17i026,cp17i036,cp17i041,cp17i051,cp17i027,cp17i047, cp17i052,cp17i035,cp17i040,cp17i050,cp17i065,cp17i044,cp17i054,cp17i069,cp17i023,cp17i043,cp17i048,cp17i053,cp17i058,cp17i068, Duration)
+
+LittleMCAR(missing)
+
+LittleMCAR(missing2)
+
+missing_plot <- aggr(missing, col = c('navyblue','red'),combined = T,  numbers= T, sortVars=T, labels=names(missing),cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+
+missing_plot <- aggr(missing2, col = c('navyblue','red'),combined = T,  numbers= T, sortVars=T, labels=names(missing),cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+
+```
+
+
+#Vorbereitung Faktor
+```{r}
+#' @importFrom utils browseURL
+
+#' @export
+
+print.sjTable <- function(x, ...) {
+
+  # check if we have filename specified
+
+  if (!is.null(x$file)) {
+
+    # write file
+
+    write(x$knitr, file = x$file)
+
+  } else {
+
+    x$page.complete <- replace_umlauts(x$page.complete)
+
+    # else open in viewer pane
+
+    htmlFile <- tempfile(fileext = ".html")
+
+    write(x$page.complete, file = htmlFile)
+
+    # check whether we have RStudio Viewer
+
+    viewer <- getOption("viewer")
+
+    if (x$viewer && !is.null(viewer)) {
+
+      viewer(htmlFile)
+
+    } else {
+
+      utils::browseURL(htmlFile)
+
+    }
+
+  }
+
+}
+
+ 
+
+ 
+
+#' @importFrom knitr knit_print asis_output
+
+#' @export
+
+knit_print.sjTable <-  function(input, ...) {
+
+  x <- input$knitr
+
+  x <- replace_umlauts(x)
+
+  knitr::asis_output(x)
+
+  # knitr::asis_output(input$knitr)
+
+}
+
+ 
+
+ 
+
+replace_umlauts <- function(x) {
+
+  x <- gsub("\u00E4", "ä", x, fixed = TRUE, useBytes = FALSE)
+
+  x <- gsub("\u00F6", "ö", x, fixed = TRUE, useBytes = FALSE)
+
+  x <- gsub("\u00FC", "ü", x, fixed = TRUE, useBytes = FALSE)
+
+  x <- gsub("\u00C4", "Ä", x, fixed = TRUE, useBytes = FALSE)
+
+  x <- gsub("\u00D6", "Ö", x, fixed = TRUE, useBytes = FALSE)
+
+  x <- gsub("\u00DC", "Ü", x, fixed = TRUE, useBytes = FALSE)
+
+  x <- gsub("\u00DF", "ß", x, fixed = TRUE, useBytes = FALSE)
+
+  # x <- gsub("ä", "ä", x, fixed = TRUE, useBytes = TRUE)
+
+  # x <- gsub("ö", "ö", x, fixed = TRUE, useBytes = TRUE)
+
+  # x <- gsub("ü", "ü", x, fixed = TRUE, useBytes = TRUE)
+
+  # x <- gsub("Ä", "Ä", x, fixed = TRUE, useBytes = TRUE)
+
+  # x <- gsub("Ö", "Ö", x, fixed = TRUE, useBytes = TRUE)
+
+  # x <- gsub("Ü", "Ü", x, fixed = TRUE, useBytes = TRUE)
+
+  # x <- gsub("ß", "ß", x, fixed = TRUE, useBytes = TRUE)
+
+ 
+
+  x
+
+}
+
+ 
+
+ 
+
+# knitr method for grpmean() ----
+
+ 
+
+#' @export
+
+knit_print.sjt_grpmean <-  function(input, ...) {
+
+  knitr::asis_output(pgrpmean(input, ...)$knitr)
+
+}
+
+ 
+
+#' @export
+
+knit_print.sjt_grpmeans <-  function(input, ...) {
+
+  knitr::asis_output(pgrpmeans(input, ...)$knitr)
+
+}
+
+ 
+
+ 
+
+# knitr method method for reliab_test() ----
+
+ 
+
+#' @export
+
+knit_print.sjt_reliab <-  function(input, ...) {
+
+  knitr::asis_output(preliab(input, ...)$knitr)
+
+}
+
+ 
+
+ 
+
+# knitr method method for descr() ----
+
+ 
+
+#' @export
+
+knit_print.sjt_descr <-  function(input, ...) {
+
+  knitr::asis_output(pdescr(input, ...)$knitr)
+
+}
+
+ 
+
+#' @export
+
+knit_print.sjt_grpdescr <-  function(input, ...) {
+
+  knitr::asis_output(pgdescr(input, ...)$knitr)
+
+}
+
+ 
+
+ 
+
+# knitr method method for equi_test() ----
+
+ 
+
+#' @export
+
+knit_print.sjt_descr <-  function(input, ...) {
+
+  knitr::asis_output(pequi_test(input, ...)$knitr)
+
+}
+
+ 
+
+ 
+
+# knitr method for frq() ----
+
+ 
+
+#' @export
+
+knit_print.sjt_frq <-  function(input, ...) {
+
+  knitr::asis_output(pfrq(input, ...)$knitr)
+
+}
+
+ 
+
+ 
+
+# knitr method for mwu() ----
+
+ 
+
+#' @export
+
+knit_print.sjt_mwu <-  function(input, ...) {
+
+  knitr::asis_output(pmwu(input, ...)$knitr)
+
+}
+
+ 
+
+ 
+
+# HTMl table method for grpmean() ----
+
+ 
+
+#' @export
+
+print.sjt_grpmean <- function(x, ...) {
+
+  print(pgrpmean(x, ...), ...)
+
+}
+
+ 
+
+#' @export
+
+print.sjt_grpmeans <- function(x, ...) {
+
+  print(pgrpmeans(x, ...), ...)
+
+}
+
+ 
+
+ 
+
+# HTMl table method for reliab_test() ----
+
+ 
+
+#' @export
+
+print.sjt_reliab <- function(x, ...) {
+
+  print(preliab(x, ...), ...)
+
+}
+
+ 
+
+ 
+
+# HTMl table method for equi_test() ----
+
+ 
+
+#' @export
+
+print.sjt_equi_test <- function(x, ...) {
+
+  print(pequi_test(x, ...), ...)
+
+}
+
+ 
+
+ 
+
+# HTMl table method for descr() ----
+
+ 
+
+#' @export
+
+print.sjt_descr <- function(x, ...) {
+
+  print(pdescr(x, ...), ...)
+
+}
+
+ 
+
+#' @export
+
+print.sjt_grpdescr <- function(x, ...) {
+
+  print(pgdescr(x, ...), ...)
+
+}
+
+ 
+
+ 
+
+# HTMl table method for frq() ----
+
+ 
+
+#' @export
+
+print.sjt_frq <- function(x, ...) {
+
+  print(pfrq(x, ...), ...)
+
+}
+
+ 
+
+ 
+
+# HTMl table method for mwu() ----
+
+ 
+
+#' @export
+
+print.sjt_mwu <- function(x, ...) {
+
+  print(pmwu(x, ...), ...)
+
+}
+
+ 
+
+ 
+
+ 
+
+pgrpmean <- function(x, ...) {
+
+  title <- sprintf(
+
+    "Mean for %s by %s",
+
+    attr(x, "dv.label", exact = TRUE),
+
+    attr(x, "grp.label", exact = TRUE)
+
+  )
+
+ 
+
+  footnote <- sprintf(
+
+    "Anova: R2=%.3f; adj.R2=%.3f; F=%.3f; p=%.3f",
+
+    attr(x, "r2", exact = TRUE),
+
+    attr(x, "adj.r2", exact = TRUE),
+
+    attr(x, "fstat", exact = TRUE),
+
+    attr(x, "p.value", exact = TRUE)
+
+  )
+
+ 
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+  tab_df(
+
+    x = x,
+
+    title = title,
+
+    footnote = footnote,
+
+    col.header = NULL,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = TRUE,
+
+    alternate.rows = FALSE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-top:1px solid; border-bottom: double;'
+
+    ),
+
+    file = file,
+
+    use.viewer = attr(x, "print", exact = TRUE) == "viewer",
+
+    ...
+
+  )
+
+}
+
+ 
+
+ 
+
+#' @importFrom purrr map_chr
+
+pgrpmeans <- function(x, ...) {
+
+  uv <- attr(x, "print", exact = TRUE) == "viewer"
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+  titles <- purrr::map_chr(x, ~ sprintf(
+
+    "Mean for %s by %s
+grouped by %s",
+
+    attr(.x, "dv.label", exact = TRUE),
+
+    attr(.x, "grp.label", exact = TRUE),
+
+    gsub(pattern = "\n", replacement = "
+", attr(.x, "group", exact = TRUE), fixed = T)
+
+  ))
+
+ 
+
+  footnotes <- purrr::map_chr(x, ~ sprintf(
+
+    "Anova: R2=%.3f; adj.R2=%.3f; F=%.3f; p=%.3f",
+
+    attr(.x, "r2", exact = TRUE),
+
+    attr(.x, "adj.r2", exact = TRUE),
+
+    attr(.x, "fstat", exact = TRUE),
+
+    attr(.x, "p.value", exact = TRUE)
+
+  ))
+
+ 
+
+ 
+
+  tab_dfs(
+
+    x = x,
+
+    titles = titles,
+
+    footnotes = footnotes,
+
+    col.header = NULL,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = TRUE,
+
+    alternate.rows = FALSE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-top:1px solid; border-bottom: double;'
+
+    ),
+
+    file = file,
+
+    use.viewer = uv,
+
+    ...
+
+  )
+
+}
+
+ 
+
+ 
+
+pequi_test <- function(x, ...) {
+
+  chead <- c(
+
+    "Term",
+
+    "H0",
+
+    "% in ROPE",
+
+    "HDI (95%)"
+
+  )
+
+ 
+
+  x$inside.rope <- sprintf("%.1f%%", x$inside.rope)
+
+  x$hdi <- sprintf("%.2f – %.2f", x$hdi.low, x$hdi.high)
+
+ 
+
+  x <- dplyr::select(x, c(1:3, 6))
+
+ 
+
+  footnote <- sprintf(
+
+    "Effect Size: %.2f · ROPE: %.2f – %.2f · Samples: %i",
+
+    attr(x, "eff_size", exact = TRUE),
+
+    attr(x, "rope", exact = TRUE)[1],
+
+    attr(x, "rope", exact = TRUE)[2],
+
+    attr(x, "nsamples", exact = TRUE)
+
+  )
+
+ 
+
+  if (isTRUE(attr(x, "critical"))) {
+
+    footnote <- paste0(
+
+      footnote,
+
+      "
+(*) number of effective samples may be insufficient for this parameter"
+
+    )
+
+  }
+
+ 
+
+ 
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+  tab_df(
+
+    x = x,
+
+    title = "Test for Practical Equivalence of Model Parameters",
+
+    footnote = footnote,
+
+    col.header = chead,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = TRUE,
+
+    alternate.rows = FALSE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-bottom: 1px solid;',
+
+      css.col3 = '+text-align:right;'
+
+    ),
+
+    file = file,
+
+    use.viewer = attr(x, "print", exact = TRUE) == "viewer",
+
+    ...
+
+  )
+
+}
+
+ 
+
+ 
+
+preliab <- function(x, ...) {
+
+  chead <- c(
+
+    "Variable",
+
+    "α if deleted",
+
+    "Item Discrimination"
+
+  )
+
+ 
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+  tab_df(
+
+    x = x,
+
+    title = "Reliability Test",
+
+    footnote = NULL,
+
+    col.header = chead,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = FALSE,
+
+    alternate.rows = FALSE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-bottom: 1px solid;'
+
+    ),
+
+    file = file,
+
+    use.viewer = attr(x, "print", exact = TRUE) == "viewer",
+
+    ...
+
+  )
+
+}
+
+ 
+
+ 
+
+#' @importFrom purrr map_if
+
+#' @importFrom sjmisc is_float
+
+pdescr <- function(x, ...) {
+
+  digits <- 2
+
+ 
+
+  # do we have digits argument?
+
+  add.args <- lapply(match.call(expand.dots = F)$`...`, function(x) x)
+
+  if ("digits" %in% names(add.args)) digits <- eval(add.args[["digits"]])
+
+ 
+
+  uv <- attr(x, "print", exact = TRUE) == "viewer"
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+  chead <- c(
+
+    "Variable",
+
+    "Type",
+
+    "Label",
+
+    "N",
+
+    "Missings (%)",
+
+    "Mean",
+
+    "SD",
+
+    "SE",
+
+    "Median",
+
+    "Trimmed Mean",
+
+    "Range",
+
+    "Skewness"
+
+  )
+
+ 
+
+  present_columns <- c("var", "type", "label", "n", "NA.prc", "mean", "sd", "se", "md", "trimmed", "range", "skew")
+
+  chead <- chead[which(present_columns %in% colnames(x))]
+
+ 
+
+  x <- x %>%
+
+    purrr::map_if(sjmisc::is_float, ~ round(.x, digits)) %>%
+
+    as.data.frame()
+
+ 
+
+  tab_df(
+
+    x = x,
+
+    title = "Basic descriptive statistics",
+
+    footnote = NULL,
+
+    col.header = chead,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = FALSE,
+
+    alternate.rows = TRUE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-bottom: 1px solid;',
+
+      css.centeralign = 'text-align:right;',
+
+      css.col2 = '+text-align:left;',
+
+      css.col3 = '+text-align:left;'
+
+    ),
+
+    file = file,
+
+    use.viewer = uv,
+
+    ...
+
+  )
+
+}
+
+ 
+
+ 
+
+#' @importFrom purrr map_if map_chr map
+
+#' @importFrom sjmisc is_float
+
+pgdescr <- function(x, ...) {
+
+  titles <- purrr::map_chr(x, ~ sprintf(
+
+    "Basic descriptives
+grouped by %s",
+
+    gsub(pattern = "\n", replacement = "
+", attr(.x, "group", exact = TRUE), fixed = T)
+
+  ))
+
+ 
+
+  digits <- 2
+
+ 
+
+  # do we have digits argument?
+
+  add.args <- lapply(match.call(expand.dots = F)$`...`, function(x) x)
+
+  if ("digits" %in% names(add.args)) digits <- eval(add.args[["digits"]])
+
+ 
+
+  uv <- attr(x, "print", exact = TRUE) == "viewer"
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+  chead <- c(
+
+    "Variable",
+
+    "Type",
+
+    "Label",
+
+    "N",
+
+    "Missings (%)",
+
+    "Mean",
+
+    "SD",
+
+    "SE",
+
+    "Median",
+
+    "Trimmed Mean",
+
+    "Range",
+
+    "Skewness"
+
+  )
+
+ 
+
+  x <- x %>%
+
+    purrr::map(~ purrr::map_if(
+
+      .x,
+
+      sjmisc::is_float,
+
+      ~ round(.x, digits)
+
+    ) %>% as.data.frame())
+
+ 
+
+  tab_dfs(
+
+    x = x,
+
+    titles = titles,
+
+    footnotes = NULL,
+
+    col.header = chead,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = FALSE,
+
+    alternate.rows = TRUE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-bottom: 1px solid;',
+
+      css.col3 = '+text-align:left;'
+
+    ),
+
+    file = file,
+
+    use.viewer = uv,
+
+    ...
+
+  )
+
+}
+
+ 
+
+ 
+
+#' @importFrom purrr map_if map_chr map
+
+#' @importFrom dplyr n_distinct select
+
+#' @importFrom sjmisc is_empty
+
+pfrq <- function(x, ...) {
+
+ 
+
+  uv <- attr(x, "print", exact = TRUE) == "viewer"
+
+  enc <- attr(x, "encoding", exact = TRUE)
+
+  file <- attr(x, "file", exact = TRUE)
+
+ 
+
+  if (is.null(enc)) enc <- "UTF-8"
+
+ 
+
+ 
+
+  titles <- purrr::map_chr(x, function(i) {
+
+ 
+
+    ret <- ""
+
+ 
+
+    # get variable label
+
+    lab <- attr(i, "label", exact = T)
+
+    vt <- attr(i, "vartype", exact = T)
+
+ 
+
+    # fix variable type string
+
+    if (!sjmisc::is_empty(vt))
+
+      vt <- sprintf(" <%s>", vt)
+
+    else
+
+      vt <- ""
+
+ 
+
+    if (!is.null(lab)) ret <- sprintf("%s%s", lab, vt)
+
+ 
+
+    # get grouping title label
+
+    grp <- attr(i, "group", exact = T)
+
+ 
+
+    if (!is.null(grp))
+
+      ret <- sprintf("%s
+grouped by:
+%s", ret, grp)
+
+ 
+
+    gsub(pattern = "\n", replacement = "
+", x = ret, fixed = T)
+
+  })
+
+ 
+
+ 
+
+  footnotes <- purrr::map_chr(x, ~ sprintf(
+
+    "total N=%i · valid N=%i · x̄=%.2f · σ=%.2f\n",
+
+    sum(.x$frq, na.rm = TRUE),
+
+    sum(.x$frq[1:(nrow(.x) - 1)], na.rm = TRUE),
+
+    attr(.x, "mean", exact = T),
+
+    attr(.x, "sd", exact = T)
+
+  )
+
+  )
+
+ 
+
+ 
+
+  x <- purrr::map(x, function(i) {
+
+    if (dplyr::n_distinct(i$label) == 1 && unique(i$label) == "")
+
+      i <- dplyr::select(i, -.data$label)
+
+    i
+
+  })
+
+ 
+
+ 
+
+  tab_dfs(
+
+    x = x,
+
+    titles = titles,
+
+    footnotes = footnotes,
+
+    col.header = NULL,
+
+    show.type = FALSE,
+
+    show.rownames = FALSE,
+
+    show.footnote = TRUE,
+
+    alternate.rows = FALSE,
+
+    encoding = enc,
+
+    CSS = list(
+
+      css.firsttablecol = '+text-align:left;',
+
+      css.lasttablerow = 'border-bottom: 1px solid;',
+
+      css.col2 = 'text-align: left;',
+
+      css.col3 = 'text-align: right;',
+
+      css.col4 = 'text-align: right;',
+
+      css.col5 = 'text-align: right;',
+
+      css.col6 = 'text-align: right;'
+
+    ),
+
+    file = file,
+
+    use.viewer = uv,
+
+    ...
+
+  )
+
+}
+```
+
+
+#Faktoranalyse
+```{r}
+liss_att <- liss_2017 %>% 
+  select(cp17i001:cp17i009,cp17i184:cp17i188)
+
+liss_att_2 <- liss_2017 %>% 
+  select(cp17i001,cp17i003:cp17i005,cp17i187,cp17i188)
+
+
+parameters::principal_components(liss_att) %>% 
+  plot()
+
+parameters::principal_components(liss_att_2) %>% 
+  plot()
+
+liss_big_five <- liss_2017 %>% 
+  select(cp17i020:cp17i069)
+
+big_five <- PCA(liss_big_five, # data
+                 scale.unit = F, # z-scales (what we did manually)
+                 ncp = 5, #number of dimensions kept in the final results.
+                 graph = T)
+
+summary(big_five)
+
+parameters::principal_components(liss_big_five) %>% 
+  plot()
+
+
+pca_five <- principal(liss_big_five,nfactors = 5)
+
+sink("output.csv")
+
+pca_five
+
+sink()
+
+liss_five_less <- liss_big_five %>% 
+  select(cp17i023,cp17i026,cp17i027,cp17i026,cp17i035,cp17i036,cp17i040,cp17i041,cp17i043,cp17i044,cp17i047,cp17i048,cp17i050:cp17i054,cp17i058,cp17i062,cp17i065,cp17i068,cp17i069)
+
+pca_five <- principal(liss_five_less,nfactors = 5)
+
+print(pca_five)
+
+
+```
+
+#Random
+##Descriptives
+```{r}
+descriptives <- function(data) {
+descriptives <- psych::describe(data)
+descriptives$vars <- NULL
+descriptives$trimmed <- NULL
+descriptives$mad <- NULL
+descriptives$range <- NULL
+descriptives$se <- NULL
+descriptives$kstest <- c(rep(0,8),NA)
+descriptives
+}
+
+liss_na<-na.omit(liss_descr)
+
+des<-descriptives(liss_descr)
+
+destab<-xtable(des, include.rownames=T, booktabs = TRUE, type = "latex")
+
+for(var in liss_descr) {
+  print(ks.test(x = var, y = "pnorm"))
+}
+
+for (var in liss_descr) {
+  #plotname <- as.character(varname)
+  #name <- paste(plotname,"plot.pdf") 
+  #pdf(file = paste(var,"pdf", sep=".")) 
+  print(ggplot(liss_descr, aes(x = var)) +
+  geom_histogram(col="black")) 
+  #ggsave("things.pdf")
+  #dev.off()
+  }
+```
+
+##Descriptives Visualisierung
+```{r}
+ggplot(liss_descr, aes(x = Duration)) +
+  geom_histogram(col="black",fill="blue") +
+  labs(x = "Duration in minutes", y = "Amount of people", title = "Distribution of the Duration of the survey") +
+  ggsave("hist_Duration.jpeg")
+```
+
+##Multivariatenormalitätsverteilung
+```{r}
+Multi <-function(data,x) {
+set.seed(x)
+
+idx <- sample(seq(1, 2), size = nrow(liss_descr), replace = TRUE, prob = c(.8, .2))
+train_liss <- liss_descr[idx == 1,]
+test <- liss_descr[idx == 2,]
+
+mvn_mardia<-mvn(train_liss, mvnTest = c("mardia"))
+mvn_hz<-mvn(train_liss, mvnTest = c("hz"))
+mvn_dh<-mvn(train_liss, mvnTest = c("dh"))
+
+print(mvn_mardia$multivariateNormality)
+print(mvn_hz$multivariateNormality)
+print(mvn_dh$multivariateNormality) 
+}
+Multi(liss_descr,1)
+Multi(liss_descr,2)
+Multi(liss_descr,3)
+```
+
+##Bivariate 
+```{r}
+corma<-cor(liss_na)
+
+corplo<-cor.plot(corma, cex = 0.4, MAR = 3)
+
+corrplot(corma,method = "shade")
+
+```
+
+#SEM 1
+```{r}
+model1 <-'# Model 1
+
+# Latent Variables
+
+Attitude =~ cp17i003 + cp17i001 + cp17i004 + cp17i005 + cp17i187 + cp17i188 
+
+Agreeableness =~ cp17i036 + cp17i026  + cp17i041 +cp17i051 
+
+Conscientiousness =~  cp17i052 + cp17i027 + cp17i047  
+
+Extraversion =~ cp17i050 + cp17i065 + cp17i035 + cp17i040  
+
+Openness =~ cp17i044 + cp17i054 + cp17i069
+
+Neuroticism =~ cp17i048 +cp17i023 + cp17i043 + cp17i053 + cp17i058 + cp17i068
+
+# Mediator
+
+Attitude ~ a1*Agreeableness + a2*Conscientiousness + a3*Extraversion + a4*Openness + a5*Neuroticism
+
+# Direct Effect
+
+Duration ~ b*Attitude + c1*Agreeableness + c2*Conscientiousness + c3*Extraversion + c4*Openness + c5*Neuroticism
+
+# Indirect Effect
+ab1 := a1*b
+ab2 := a2*b
+ab3 := a3*b
+ab4 := a4*b
+ab5 := a5*b
+
+#Total Effect
+Agree := c1 + ab1
+Consc := c2 + ab2
+Extra := c3 + ab3
+Openn := c4 + ab4
+Neuro := c5 + ab5
+
+'
+mod1 <-sem(model=model1, data=liss_2017,mimic="Eqs",  estimator = "ML",missing='fiml',  se = "bootstrap" ) ; beepr::beep(sound = 8)
+
+summary(mod1, fit.measures=TRUE, standardized=TRUE)
+
+
+```
+
+##Modifikation
+
+```{r}
+modimod<-modificationindices(mod1, sort. = T)
+modimod
+```
+
+#SEM 2
+
+```{r}
+model2 <-'# Model 2
+
+# Latent Variables
+
+Attitude =~ cp17i003 + cp17i001 + cp17i004 + cp17i005 
+
+Agreeableness =~ cp17i036 + cp17i026  + cp17i041 +cp17i051 
+
+Conscientiousness =~  cp17i052 + cp17i027 + cp17i047  
+
+Extraversion =~ cp17i050 + cp17i065 + cp17i035 + cp17i040  
+
+Openness =~ cp17i044 + cp17i054 + cp17i069
+
+Neuroticism =~ cp17i048 +cp17i023 + cp17i043 + cp17i053 + cp17i058 + cp17i068
+
+# Mediator
+
+Attitude ~ a1*Agreeableness + a2*Conscientiousness + a3*Extraversion + a4*Openness + a5*Neuroticism
+
+# Direct Effect
+
+Duration ~ b*Attitude + c1*Agreeableness + c2*Conscientiousness + c3*Extraversion + c4*Openness + c5*Neuroticism
+
+# Indirect Effect
+ab1 := a1*b
+ab2 := a2*b
+ab3 := a3*b
+ab4 := a4*b
+ab5 := a5*b
+
+#Total Effect
+Agree := c1 + ab1
+Consc := c2 + ab2
+Extra := c3 + ab3
+Openn := c4 + ab4
+Neuro := c5 + ab5
+'
+mod2 <-sem(model=model2, data=liss_2017,mimic="Eqs",  estimator = "ML",missing='fiml',  se = "bootstrap" ) ; beepr::beep(sound = 8)
+
+summary(mod2, fit.measures=TRUE, standardized=TRUE)
+```
+
+##Modifikation
+
+```{r}
+modimod2<-modificationindices(mod2, sort. = T)
+modimod2
+```
+
+#SEM 3 - ohne 53 & 58
+
+```{r}
+model3 <-'# Model 3
+
+# Latent Variables
+
+Attitude =~ cp17i003 + cp17i001 + cp17i004 + cp17i005 
+
+Agreeableness =~ cp17i036 + cp17i026  + cp17i041 +cp17i051 
+
+Conscientiousness =~  cp17i052 + cp17i027 + cp17i047  
+
+Extraversion =~ cp17i050 + cp17i065 + cp17i035 + cp17i040  
+
+Openness =~ cp17i044 + cp17i054 + cp17i069
+
+Neuroticism =~ cp17i048 +cp17i023 + cp17i043 + cp17i068
+
+# Mediator
+
+Attitude ~ a1*Agreeableness + a2*Conscientiousness + a3*Extraversion + a4*Openness + a5*Neuroticism
+
+# Direct Effect
+
+Duration ~ b*Attitude + c1*Agreeableness + c2*Conscientiousness + c3*Extraversion + c4*Openness + c5*Neuroticism
+
+# Indirect Effect
+ab1 := a1*b
+ab2 := a2*b
+ab3 := a3*b
+ab4 := a4*b
+ab5 := a5*b
+
+#Total Effect
+Agree := c1 + ab1
+Consc := c2 + ab2
+Extra := c3 + ab3
+Openn := c4 + ab4
+Neuro := c5 + ab5
+'
+mod3 <-sem(model=model3, data=liss_2017,mimic="Eqs",  estimator = "ML",missing='fiml',  se = "bootstrap" ) ; beepr::beep(sound = 8)
+
+summary(mod3, fit.measures=TRUE, standardized=TRUE)
+```
+
+##Modifikation 
+```{r}
+modimod3 <-modificationindices(mod3, sort. = T)
+modimod3
+```
+
+#SEM 4
+
+```{r}
+model4 <-'# Model 4
+
+# Latent Variables
+
+Attitude =~ cp17i003 + cp17i001 + cp17i004 + cp17i005 
+
+Agreeableness =~ cp17i036 + cp17i026  + cp17i041 +cp17i051 
+
+Conscientiousness =~  cp17i052 + cp17i027 + cp17i047  
+
+Extraversion =~ cp17i050 + cp17i065 + cp17i035 + cp17i040  
+
+Openness =~ cp17i044 + cp17i054 + cp17i069
+
+Neuroticism =~ cp17i048 +cp17i023 + cp17i043 + cp17i068
+
+# Modification
+
+cp17i001 ~~ cp17i003
+cp17i004 ~~ cp17i005
+
+
+# Mediator
+
+Attitude ~ a1*Agreeableness + a2*Conscientiousness + a3*Extraversion + a4*Openness + a5*Neuroticism
+
+# Direct Effect
+
+Duration ~ b*Attitude + c1*Agreeableness + c2*Conscientiousness + c3*Extraversion + c4*Openness + c5*Neuroticism
+
+# Indirect Effect
+ab1 := a1*b
+ab2 := a2*b
+ab3 := a3*b
+ab4 := a4*b
+ab5 := a5*b
+
+#Total Effect
+Agree := c1 + ab1
+Consc := c2 + ab2
+Extra := c3 + ab3
+Openn := c4 + ab4
+Neuro := c5 + ab5
+'
+mod4 <-sem(model=model4, data=liss_2017,mimic="Eqs",  estimator = "ML",missing='fiml',  se = "bootstrap" ) ; beepr::beep(sound = 8)
+
+summary(mod4, fit.measures=TRUE, standardized=TRUE)
+```
+
+##Modifikation 
+```{r}
+modimod4 <-modificationindices(mod4, sort. = T)
+modimod4
+```
+
+#SEM 5
+
+```{r}
+model5 <-'# Model 5
+
+# Latent Variables
+
+Attitude =~ cp17i003 + cp17i001 + cp17i004 + cp17i005 
+
+Agreeableness =~ cp17i036 + cp17i026  + cp17i041 +cp17i051 
+
+Conscientiousness =~  cp17i052 + cp17i027 + cp17i047  
+
+Extraversion =~ cp17i050 + cp17i065 + cp17i035 + cp17i040  
+
+Openness =~ cp17i044 + cp17i054 + cp17i069
+
+Neuroticism =~ cp17i048 +cp17i023 + cp17i043 + cp17i068
+
+# Modification
+
+cp17i001 ~~ cp17i003
+cp17i004 ~~ cp17i005
+cp17i035 ~~ cp17i065
+
+
+# Mediator
+
+Attitude ~ a1*Agreeableness + a2*Conscientiousness + a3*Extraversion + a4*Openness + a5*Neuroticism
+
+# Direct Effect
+
+Duration ~ b*Attitude + c1*Agreeableness + c2*Conscientiousness + c3*Extraversion + c4*Openness + c5*Neuroticism
+
+# Indirect Effect
+ab1 := a1*b
+ab2 := a2*b
+ab3 := a3*b
+ab4 := a4*b
+ab5 := a5*b
+
+#Total Effect
+Agree := c1 + ab1
+Consc := c2 + ab2
+Extra := c3 + ab3
+Openn := c4 + ab4
+Neuro := c5 + ab5
+'
+mod5 <-sem(model=model5, data=liss_2017,mimic="Eqs",  estimator = "ML",missing='fiml',  se = "bootstrap" ) ; beepr::beep(sound = 8)
+
+summary(mod5, fit.measures=TRUE, standardized=TRUE)
+```
+
+
+
+
+
+#Chi² Difference Test
+```{r}
+chisquare_difference <- lavTestLRT(mod3,mod4, mod5, fit = "Chisq")
+chisquare_difference
+chidiff_table <-xtable(chisquare_difference, booktabs = TRUE, type = "latex")
+chidiff_table
+```
+
+
+#Modificationtable
+```{r}
+##tablemod <-xtable(modimod, booktabs = TRUE, type = "latex")
+##tablemod
+##tablemod2 <-xtable(modimod2, booktabs = TRUE, type = "latex")
+##tablemod2
+##tablemod3 <-xtable(modimod3, booktabs = TRUE, type = "latex")
+##tablemod3
+##tablemod4 <-xtable(modimod4, booktabs = TRUE, type = "latex")
+##tablemod4
+##tablemod5 <-xtable(modimod5, booktabs = TRUE, type = "latex")
+##tablemod5
+```
+
+##Sem Vis
+```{r}
+semPaths(mod5,
+             title=TRUE,
+             style = "OpenMx",
+             "std", edge.label.cex = 0.5, exoVar = FALSE,# mit stand. koeff.
+             residuals=T,
+             curvePivot = TRUE)
+```
+
